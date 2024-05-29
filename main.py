@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import re
 import os
+import pandas as pd
 
 def download_file(url):
     try:
@@ -55,19 +56,13 @@ def main():
             print(f"Ошибка при сохранении файла {filename}: {e}")
             continue
 
-        # Чтение и вывод содержимого файла
+        # Чтение и вывод содержимого файла с использованием pandas
         try:
-            with open(filename, 'rb') as file:
-                for encoding in ['utf-8', 'cp1251', 'latin-1']:
-                    try:
-                        content = file.read().decode(encoding)
-                        print(f"Содержимое файла {filename} (кодировка {encoding}):")
-                        print(content)
-                        break
-                    except UnicodeDecodeError:
-                        pass
-        except IOError as e:
-            print(f"Ошибка при чтении файла {filename}: {e}")
+            df = pd.read_excel(filename)
+            print(f"Содержимое файла {filename}:")
+            print(df)
+        except Exception as e:
+            print(f"Ошибка при чтении файла {filename} с использованием pandas: {e}")
 
 if __name__ == "__main__":
     main()
