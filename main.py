@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import requests
 import re
 import os
@@ -7,6 +9,15 @@ from bs4 import BeautifulSoup
 from psycopg2 import sql
 from db_config import get_db_connection
 
+def extract_date_from_filename(filename):
+    match = re.search(r'(\d{2})(\d{4})', filename)
+    if match:
+        month = int(match.group(1))
+        year = int(match.group(2))
+        date = datetime(year, month, 1)
+        return date.strftime('%Y-%m-%d')
+    else:
+        raise ValueError("Невозможно извлечь дату из имени файла")
 
 def download_file(url):
     try:
@@ -55,6 +66,25 @@ def insert_deals_in_db(name):
     finally:
         conn.close()
 
+def insert_data_document_in_db(filename,region,seal,date, i):
+    conn = get_db_connection()
+    if conn is None:
+        return
+
+    try:
+        cur = conn.cursor()
+        insert_query = sql.SQL(
+            "INSERT INTO data (name, region, seal, date, search_deal_id) "
+            "VALUES (%s, %s, %s, %s, %s)"
+        )
+        cur.execute(insert_query, (filename, region, seal, date, i))
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        print(f"Ошибка при вставке данных в базу данных: {e}")
+    finally:
+        conn.close()
+
 
 def main():
     url = "https://rosstat.gov.ru/uslugi"
@@ -83,6 +113,7 @@ def main():
 
     for link in links:
         filename = os.path.basename(link)
+        date = extract_date_from_filename(filename)
 
         # Проверяем, существует ли файл в корне проекта
         if not os.path.exists(filename):
@@ -101,18 +132,23 @@ def main():
                 print(f"Ошибка при сохранении файла {filename}: {e}")
                 continue
 
-        # Чтение и вывод содержимого файла с использованием pandas
         if 'byt' in filename.lower():
+            # print(filename)
             try:
-                df = pd.read_excel(filename)
-                second_column = df.iloc[3:14, 1]  # Получаем строки с 2 по 13 во втором столбце (нумерация с нуля)
-                # print(f"Содержимое второго столбца файла {filename} (строки 2-13):")
-                for value in second_column:
-                    if pd.notna(value):  # Исключаем NaN значения
-                        print(value)
-                        # insert_deals_in_db(value)
+                xls = pd.ExcelFile(filename)
+                i = 0
+                for sheet_name in xls.sheet_names[1:13]:
+                    i += 1
+                    df = pd.read_excel(xls, sheet_name)
+                    first_column = df.iloc[:, 0]  # Первый столбец
+                    second_column = df.iloc[:, 1]  # Второй столбец
 
-                break
+                    # Обработка значений из обоих столбцов
+                    for region, seal in zip(first_column, second_column):
+                        if pd.notna(region) and pd.notna(seal):  # Исключаем NaN значения
+                            insert_data_document_in_db(filename,region,seal,date, i)
+                            # print(filename,region,seal,date, i)
+                # break # только 1 файл
             except Exception as e:
                 print(f"Ошибка при чтении файла {filename} с использованием pandas: {e}")
 
