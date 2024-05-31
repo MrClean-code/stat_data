@@ -1,13 +1,17 @@
+from dateutil.relativedelta import relativedelta
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
+from bs4 import BeautifulSoup
+from psycopg2 import sql
+from db_config import get_db_connection
+from statsmodels.tsa.arima.model import ARIMA
+
 import requests
 import re
 import os
 import pandas as pd
-from bs4 import BeautifulSoup
-from psycopg2 import sql
-from db_config import get_db_connection
+import matplotlib.pyplot as plt
 
 app = Flask(__name__)
 CORS(app)
@@ -215,6 +219,66 @@ def get_deal():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route('/forecast-price', methods=['GET'])
+def forecast_price():
+    # Получение параметров из запроса
+    deal_name = request.args.get('deal_name')
+    region = request.args.get('region')
+    date_start = request.args.get('date_start')
+    date_end = request.args.get('date_end')
+
+    # Проверка обязательных параметров
+    if not deal_name or not region or not date_start or not date_end:
+        return jsonify({"error": "Deal name, region, date_start, and date_end are required parameters"}), 400
+
+    try:
+        # Получение данных из базы данных
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+            SELECT data.seal, data.date
+            FROM data
+            JOIN search_deal ON data.search_deal_id = search_deal.id
+            WHERE search_deal.name = %s
+              AND data.date BETWEEN %s AND %s
+              AND data.region = %s
+        """
+        cur.execute(query, (deal_name, date_start, date_end, region))
+        rows = cur.fetchall()
+
+        # Проверка, что есть данные для обучения модели
+        if not rows:
+            return jsonify({"error": "No data found for the specified criteria"}), 404
+
+        # Преобразование в DataFrame
+        df = pd.DataFrame(rows, columns=['seal', 'date'])
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+
+        alpha = 0.7  # Параметр сглаживания
+
+        # Применяем экспоненциальное сглаживание ко всему столбцу 'seal'
+        df['forecast'] = df['seal'].ewm(alpha=alpha, adjust=False).mean()
+
+        # Получение последнего прогноза из данных
+        last_forecast = df['forecast'].iloc[-1]
+
+        # Прогноз на следующие 6 месяцев
+        forecast_prices = []
+        stData = datetime.strptime(date_end, '%Y-%m-%d')
+        for i in range(1, 7):
+            next_date = stData + relativedelta(months=i)
+            print(next_date)
+            # Рассчитываем прогноз для следующей даты, используя последний прогноз и параметр сглаживания alpha
+            next_forecast = last_forecast * (1 - alpha) + alpha * df['forecast'].iloc[i]
+            forecast_prices.append({"date": next_date.strftime('%Y-%m-%d'), "forecast_price": next_forecast})
+            last_forecast = next_forecast
+
+        return jsonify(forecast_prices), 200
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {e}"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=False, port=5000)

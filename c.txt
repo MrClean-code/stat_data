@@ -1,0 +1,17 @@
+forecast_prices = []
+        stData = date_end
+        for i in range(-1, -7, -1):
+            last_forecast = df['forecast'].iloc[i]
+            next_date = stData + relativedelta(months=i)
+            next_forecast = last_forecast * (1 - alpha) + alpha * df['forecast'].iloc[-1]
+            forecast_prices.append({"date": next_date.strftime('%Y-%m-%d'), "forecast_price": next_forecast})
+
+
+
+   forecast_prices = []
+        # Получаем последний прогноз и добавляем его в список forecast_prices
+        for i in range(-1, -7, -1):
+            last_forecast = df['forecast'].iloc[i]
+            forecast_prices.append(last_forecast)
+
+
