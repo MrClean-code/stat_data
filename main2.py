@@ -5,13 +5,12 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 from psycopg2 import sql
 from db_config import get_db_connection
-from statsmodels.tsa.arima.model import ARIMA
+
 
 import requests
 import re
 import os
 import pandas as pd
-import matplotlib.pyplot as plt
 
 app = Flask(__name__)
 CORS(app)
@@ -181,6 +180,9 @@ def get_deal():
     dateEnd = request.args.get('datee')
     region = request.args.get('region')
 
+    print(nameDeal)
+    print('dsadsa')
+
     if not nameDeal or not dateStart or not dateEnd or not region:
         return jsonify({"error": "Name, dates, and datee are required"}), 400
 
@@ -226,6 +228,9 @@ def forecast_price():
     region = request.args.get('region')
     date_start = request.args.get('date_start')
     date_end = request.args.get('date_end')
+
+
+    print(f"name: {deal_name}, dates: {date_start}, datee: {date_end}, region: {region}")
 
     # Проверка обязательных параметров
     if not deal_name or not region or not date_start or not date_end:
@@ -280,5 +285,9 @@ def forecast_price():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {e}"}), 500
 
+@app.route('/')
+def hello():
+    return 'Hello, world!'
+
 if __name__ == "__main__":
-    app.run(debug=False, port=5000)
+    app.run(debug=True, port=5000)
